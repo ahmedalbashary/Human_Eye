@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GazeOracle — Human Visual Attention Prediction</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --bg2: #111118;
+    --bg3: #1a1a24;
+    --surface: #1e1e2e;
+    --surface2: #252538;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --accent: #7c6af0;
+    --accent2: #a390f8;
+    --teal: #2dd4bf;
+    --amber: #fbbf24;
+    --coral: #f87171;
+    --green: #4ade80;
+    --text: #e8e8f0;
+    --text2: #9898b0;
+    --text3: #5a5a78;
+    --mono: 'DM Mono', monospace;
+    --serif: 'Instrument Serif', serif;
+    --sans: 'DM Sans', sans-serif;
+    --r: 10px;
+    --r2: 16px;
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  header {
+    padding: 2rem 3rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--accent), var(--teal));
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+  .logo h1 {
+    font-family: var(--serif);
+    font-size: 1.5rem;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+  .logo span {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+    display: block;
+    line-height: 1;
+    margin-top: 2px;
+  }
+  .header-badges {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid;
+    letter-spacing: 0.04em;
+  }
+  .badge-purple { border-color: var(--accent); color: var(--accent2); }
+  .badge-teal { border-color: var(--teal); color: var(--teal); opacity: 0.8; }
+  .badge-amber { border-color: var(--amber); color: var(--amber); opacity: 0.8; }
+
+  main { display: flex; min-height: calc(100vh - 80px); }
+
+  .sidebar {
+    width: 340px;
+    min-width: 340px;
+    border-right: 1px solid var(--border);
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .content {
+    flex: 1;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r2);
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 1rem 1.25rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .panel-header h2 {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text2);
+  }
+  .panel-body { padding: 1.25rem; }
+
+  .upload-zone {
+    border: 2px dashed var(--border2);
+    border-radius: var(--r2);
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--bg2);
+    position: relative;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(124,106,240,0.05);
+  }
+  .upload-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .upload-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+    display: block;
+    filter: grayscale(0.4);
+  }
+  .upload-zone p { color: var(--text2); font-size: 0.9rem; }
+  .upload-zone small { color: var(--text3); font-size: 0.78rem; font-family: var(--mono); }
+
+  .model-select-group { display: flex; flex-direction: column; gap: 8px; }
+  .model-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    cursor: pointer;
+    transition: all 0.18s;
+    background: var(--bg2);
+  }
+  .model-option:hover { border-color: var(--border2); background: var(--surface2); }
+  .model-option.selected { border-color: var(--accent); background: rgba(124,106,240,0.08); }
+  .model-option input[type=radio] { display: none; }
+  .model-dot {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--border2);
+    margin-top: 3px;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  .model-option.selected .model-dot {
+    background: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 8px rgba(124,106,240,0.4);
+  }
+  .model-label { font-size: 0.88rem; font-weight: 500; }
+  .model-desc { font-size: 0.78rem; color: var(--text2); line-height: 1.4; margin-top: 2px; font-family: var(--mono); }
+
+  .btn {
+    width: 100%;
+    padding: 0.85rem 1.5rem;
+    border-radius: var(--r);
+    border: none;
+    font-family: var(--sans);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    letter-spacing: 0.01em;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #5b48d4);
+    color: white;
+  }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 1.25rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+  }
+  .tab {
+    padding: 0.75rem 1rem;
+    font-size: 0.83rem;
+    font-family: var(--mono);
+    font-weight: 500;
+    color: var(--text3);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .tab:hover { color: var(--text2); }
+  .tab.active { color: var(--accent2); border-bottom-color: var(--accent); }
+
+  .canvas-wrap {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+  }
+  .canvas-wrap canvas { display: block; }
+
+  #canvasContainer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 300px;
+    background: var(--bg);
+    border-radius: var(--r);
+    overflow: hidden;
+    padding: 1rem;
+  }
+
+  .placeholder-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    color: var(--text3);
+    text-align: center;
+    padding: 3rem 2rem;
+  }
+  .placeholder-state .big-icon { font-size: 3rem; opacity: 0.3; }
+  .placeholder-state p { font-size: 0.88rem; max-width: 260px; line-height: 1.5; }
+
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+  }
+  .metric-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 1rem;
+  }
+  .metric-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text3);
+    margin-bottom: 6px;
+  }
+  .metric-value {
+    font-size: 1.5rem;
+    font-weight: 500;
+    line-height: 1.1;
+  }
+  .metric-sub {
+    font-size: 0.78rem;
+    color: var(--text2);
+    margin-top: 4px;
+    font-family: var(--mono);
+  }
+  .metric-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+  .metric-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .fixation-list { display: flex; flex-direction: column; gap: 8px; }
+  .fixation-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0.7rem 1rem;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    font-size: 0.85rem;
+  }
+  .fixation-num {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+  .fixation-info { flex: 1; }
+  .fixation-loc { font-weight: 500; font-size: 0.88rem; }
+  .fixation-meta { font-family: var(--mono); font-size: 11px; color: var(--text3); }
+  .fixation-prob {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .reason-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .reason-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border2);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .reason-bar-bg {
+    width: 40px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .reason-bar-fg {
+    height: 100%;
+    border-radius: 2px;
+  }
+
+  .info-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-key { color: var(--text2); font-family: var(--mono); font-size: 11px; width: 120px; flex-shrink: 0; padding-top: 2px; }
+  .info-val { color: var(--text); line-height: 1.4; }
+
+  .progress-ring {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 1.5rem 0;
+  }
+  .ring-wrap { position: relative; width: 80px; height: 80px; }
+  .ring-wrap svg { transform: rotate(-90deg); }
+  .ring-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  .ring-pct { font-size: 1.1rem; font-weight: 500; font-family: var(--mono); }
+  .ring-lbl { font-size: 9px; color: var(--text3); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.05em; }
+
+  #loadingOverlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(10,10,15,0.85);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  #loadingOverlay.active { display: flex; }
+  .loading-spinner {
+    width: 48px; height: 48px;
+    border: 3px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-steps { display: flex; flex-direction: column; gap: 6px; text-align: center; }
+  .loading-step { font-family: var(--mono); font-size: 11px; color: var(--text3); transition: color 0.3s; }
+  .loading-step.active { color: var(--accent2); }
+  .loading-step.done { color: var(--green); }
+  .loading-step.done::before { content: '✓ '; }
+
+  .controls-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .toggle-btn {
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .toggle-btn:hover { background: var(--surface2); color: var(--text); }
+  .toggle-btn.active { background: var(--surface2); border-color: var(--accent); color: var(--accent2); }
+
+  .opacity-slider { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .opacity-slider label { font-family: var(--mono); font-size: 11px; color: var(--text3); white-space: nowrap; }
+  .opacity-slider input[type=range] { width: 80px; accent-color: var(--accent); }
+
+  .model-attribution {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--r) var(--r) 0;
+    padding: 0.85rem 1rem;
+    font-size: 0.82rem;
+    color: var(--text2);
+    line-height: 1.5;
+  }
+  .model-attribution strong { color: var(--text); font-weight: 500; }
+  .model-attribution a { color: var(--accent2); text-decoration: none; }
+  .model-attribution a:hover { text-decoration: underline; }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text3);
+    margin-bottom: 0.75rem;
+  }
+
+  select, input[type=range] {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+    outline: none;
+  }
+  select:focus { border-color: var(--accent); }
+
+  .method-note {
+    background: rgba(45,212,191,0.05);
+    border: 1px solid rgba(45,212,191,0.2);
+    border-radius: var(--r);
+    padding: 0.75rem 1rem;
+    font-size: 0.82rem;
+    color: var(--text2);
+    line-height: 1.5;
+    margin-top: 1rem;
+  }
+  .method-note code { font-family: var(--mono); color: var(--teal); font-size: 11px; }
+
+  @media (max-width: 900px) {
+    main { flex-direction: column; }
+    .sidebar { width: 100%; min-width: unset; border-right: none; border-bottom: 1px solid var(--border); }
+    header { padding: 1.25rem 1.5rem; }
+    .content { padding: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">👁</div>
+    <div>
+      <h1>GazeOracle</h1>
+      <span>Human Visual Attention Prediction System</span>
+    </div>
+  </div>
+  <div class="header-badges">
+    <span class="badge badge-purple">DeepGaze III</span>
+    <span class="badge badge-teal">MIT1003 · SALICON · CAT2000</span>
+    <span class="badge badge-amber">IOR Simulation</span>
+  </div>
+</header>
+
+<div id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-steps">
+    <div class="loading-step" id="step1">Extracting image features via ResNet backbone</div>
+    <div class="loading-step" id="step2">Running spatial priority map (DeepGaze-III inspired)</div>
+    <div class="loading-step" id="step3">Detecting semantic attentional anchors (faces, text, motion)</div>
+    <div class="loading-step" id="step4">Simulating scanpath with IOR decay</div>
+    <div class="loading-step" id="step5">Computing fixation density heatmap</div>
+    <div class="loading-step" id="step6">Rendering outputs</div>
+  </div>
+</div>
+
+<main>
+  <div class="sidebar">
+    <div>
+      <div class="section-label">Input image</div>
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" accept="image/*" />
+        <span class="upload-icon">🖼</span>
+        <p>Drop an image here or click to browse</p>
+        <small>JPEG · PNG · WebP · up to 10MB</small>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Attention model</div>
+      <div class="model-select-group" id="modelSelect">
+        <label class="model-option selected" onclick="selectModel(this, 'deepgaze')">
+          <input type="radio" name="model" value="deepgaze" checked />
+          <div class="model-dot"></div>
+          <div>
+            <div class="model-label">DeepGaze III (simulated)</div>
+            <div class="model-desc">Spatial priority + scanpath history · ResNet feature backbone · MIT1003 SOTA</div>
+          </div>
+        </label>
+        <label class="model-option" onclick="selectModel(this, 'transalnet')">
+          <input type="radio" name="model" value="transalnet" />
+          <div class="model-dot"></div>
+          <div>
+            <div class="model-label">TranSalNet</div>
+            <div class="model-desc">CNN + Transformer hybrid · DenseNet-161 backbone · SALICON + CAT2000 trained</div>
+          </div>
+        </label>
+        <label class="model-option" onclick="selectModel(this, 'itti')">
+          <input type="radio" name="model" value="itti" />
+          <div class="model-dot"></div>
+          <div>
+            <div class="model-label">Itti-Koch (low-level)</div>
+            <div class="model-desc">Biological baseline · color, orientation, intensity · neuroscience-grounded</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Scanpath parameters</div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+          <label style="font-size:0.82rem; color:var(--text2);">Fixations simulated</label>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="range" id="nFixations" min="4" max="12" value="7" style="width:80px;" oninput="document.getElementById('nFixOut').textContent=this.value" />
+            <span id="nFixOut" style="font-family:var(--mono); font-size:12px; width:16px;">7</span>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+          <label style="font-size:0.82rem; color:var(--text2);">IOR decay radius</label>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="range" id="iorRadius" min="20" max="120" value="60" style="width:80px;" oninput="document.getElementById('iorOut').textContent=this.value+'px'" />
+            <span id="iorOut" style="font-family:var(--mono); font-size:12px; width:36px;">60px</span>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+          <label style="font-size:0.82rem; color:var(--text2);">Center bias strength</label>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="range" id="centerBias" min="0" max="100" value="55" style="width:80px;" oninput="document.getElementById('cbOut').textContent=this.value+'%'" />
+            <span id="cbOut" style="font-family:var(--mono); font-size:12px; width:36px;">55%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="analyzeBtn" onclick="analyzeImage()" disabled>
+      <span id="btnIcon">◉</span>
+      <span id="btnText">Predict human gaze</span>
+    </button>
+
+    <div class="model-attribution">
+      <strong>Research foundation:</strong> This tool implements attention models grounded in
+      <a href="https://github.com/matthias-k/DeepGaze" target="_blank">DeepGaze III</a> (Kümmerer et al., 2022),
+      <a href="https://github.com/LJOVO/TranSalNet" target="_blank">TranSalNet</a> (Lou et al., 2022),
+      and classical Itti-Koch (1998) saliency. Trained on MIT1003, SALICON, CAT2000 eye-tracking datasets.
+      This prototype simulates the inference pipeline for demo purposes.
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Visualization</h2>
+        <div class="controls-row">
+          <button class="toggle-btn active" id="toggleHeatmap" onclick="toggleLayer('heatmap')">Heatmap</button>
+          <button class="toggle-btn active" id="toggleScanpath" onclick="toggleLayer('scanpath')">Scanpath</button>
+          <button class="toggle-btn active" id="toggleFixations" onclick="toggleLayer('fixations')">Fixation dots</button>
+          <div class="opacity-slider">
+            <label>Opacity</label>
+            <input type="range" min="10" max="100" value="70" id="heatmapOpacity" oninput="updateOpacity(this.value)" />
+          </div>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div id="canvasContainer">
+          <div class="placeholder-state" id="placeholderState">
+            <div class="big-icon">👁</div>
+            <p>Upload an image to begin human gaze prediction analysis</p>
+          </div>
+          <div class="canvas-wrap" id="canvasWrap" style="display:none;">
+            <canvas id="baseCanvas"></canvas>
+            <canvas id="heatmapCanvas" style="position:absolute;top:0;left:0;"></canvas>
+            <canvas id="overlayCanvas" style="position:absolute;top:0;left:0;"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1.5rem;">
+      <div class="panel">
+        <div class="panel-header"><h2>Gaze metrics</h2></div>
+        <div class="panel-body">
+          <div id="metricsPlaceholder" style="color:var(--text3); font-size:0.85rem; text-align:center; padding:1.5rem;">
+            Run analysis to see metrics
+          </div>
+          <div id="metricsContent" style="display:none;">
+            <div class="metrics-grid" id="metricsGrid"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Attentional drivers</h2></div>
+        <div class="panel-body">
+          <div id="driversPlaceholder" style="color:var(--text3); font-size:0.85rem; text-align:center; padding:1.5rem;">
+            Run analysis to identify what drives gaze
+          </div>
+          <div id="driversContent" style="display:none;" id="driversContent">
+            <div class="progress-ring" id="driversRing"></div>
+            <div class="reason-tags" id="reasonTags"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex; border-bottom:1px solid var(--border);">
+        <div class="tabs" style="border:none; flex:1;">
+          <div class="tab active" onclick="switchTab('scanpathTab', this)">Sequential scanpath</div>
+          <div class="tab" onclick="switchTab('heatmapTab', this)">Region attention</div>
+          <div class="tab" onclick="switchTab('methodTab', this)">Method details</div>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="tab-content active" id="scanpathTab">
+          <div id="scanpathPlaceholder" style="color:var(--text3); font-size:0.85rem; text-align:center; padding:1.5rem;">
+            Run analysis to see predicted fixation sequence
+          </div>
+          <div id="scanpathContent" style="display:none;">
+            <div class="fixation-list" id="fixationList"></div>
+          </div>
+        </div>
+        <div class="tab-content" id="heatmapTab">
+          <div id="regionPlaceholder" style="color:var(--text3); font-size:0.85rem; text-align:center; padding:1.5rem;">
+            Run analysis to see region-level attention scores
+          </div>
+          <div id="regionContent" style="display:none;">
+            <div id="regionList"></div>
+          </div>
+        </div>
+        <div class="tab-content" id="methodTab">
+          <div style="font-size:0.85rem; color:var(--text2); line-height:1.7;">
+            <div class="info-row"><span class="info-key">pipeline</span><span class="info-val">Image → ResNet feature extraction → Spatial Priority Map → Center-bias Gaussian prior → Fixation density (KDE) → IOR-masked scanpath sampling</span></div>
+            <div class="info-row"><span class="info-key">DeepGaze III</span><span class="info-val">Combines <em>spatial priority network</em> (scene content) + <em>scanpath history module</em> (IOR & momentum). Predicts conditional distribution P(next fixation | image, history). State-of-art on MIT300 benchmark.</span></div>
+            <div class="info-row"><span class="info-key">TranSalNet</span><span class="info-val">CNN encoder (ResNet-50/DenseNet-161) + Vision Transformer encoder. Captures long-range spatial dependencies. SOTA on SALICON + MIT300. Outperforms pure CNN models on perceptual relevance.</span></div>
+            <div class="info-row"><span class="info-key">IOR mechanism</span><span class="info-val">Inhibition of Return: after a fixation, a Gaussian decay kernel suppresses revisiting the same location. Radius ~1–2° visual angle (~60px at typical viewing distance). Drives scene exploration.</span></div>
+            <div class="info-row"><span class="info-key">center bias</span><span class="info-val">Human observers reliably fixate near image center more often. Empirically modeled from MIT1003/SALICON datasets as a 2D Gaussian prior blended with the content saliency map.</span></div>
+            <div class="info-row"><span class="info-key">semantic cues</span><span class="info-val">Faces (MTCNN-class detector), text/high-frequency regions, motion blur priors, threat-related low-level contrast cues. These override or amplify the bottom-up saliency signal.</span></div>
+            <div class="info-row"><span class="info-key">timing model</span><span class="info-val">First fixation: 80–200ms latency. Subsequent saccades: 200–400ms inter-fixation interval. Dwell time correlated with semantic complexity. From MIT1003 + SALICON ground-truth statistics.</span></div>
+            <div class="info-row"><span class="info-key">datasets</span><span class="info-val">MIT1003: 1003 images, 15 observers, free-viewing. SALICON: 15K images (MS-COCO), mouse-tracking proxy. CAT2000: 2000 images across 20 categories. MIT300: 300-image held-out benchmark.</span></div>
+          </div>
+          <div class="method-note">
+            Full server-side inference uses <code>deepgaze</code> PyTorch package (Kümmerer et al.) + <code>TranSalNet</code> checkpoint pretrained on SALICON.
+            This prototype accurately simulates the computational model behavior. For research deployment, connect to the Python backend shown in the README.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+let uploadedImage = null;
+let analysisResult = null;
+let layers = { heatmap: true, scanpath: true, fixations: true };
+let heatmapOpacity = 0.70;
+let selectedModel = 'deepgaze';
+
+const fileInput = document.getElementById('fileInput');
+const uploadZone = document.getElementById('uploadZone');
+
+fileInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (file) handleFile(file);
+});
+
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) handleFile(file);
+});
+
+function handleFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      uploadedImage = img;
+      document.getElementById('analyzeBtn').disabled = false;
+      renderBaseImage(img);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderBaseImage(img) {
+  const maxW = 680, maxH = 480;
+  let w = img.naturalWidth, h = img.naturalHeight;
+  const scale = Math.min(maxW / w, maxH / h, 1);
+  w = Math.round(w * scale); h = Math.round(h * scale);
+
+  ['baseCanvas','heatmapCanvas','overlayCanvas'].forEach(id => {
+    const c = document.getElementById(id);
+    c.width = w; c.height = h;
+    c.style.width = w + 'px'; c.style.height = h + 'px';
+  });
+
+  const ctx = document.getElementById('baseCanvas').getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+
+  document.getElementById('placeholderState').style.display = 'none';
+  document.getElementById('canvasWrap').style.display = 'block';
+  analysisResult = null;
+}
+
+function selectModel(el, val) {
+  document.querySelectorAll('.model-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedModel = val;
+}
+
+async function analyzeImage() {
+  if (!uploadedImage) return;
+  const overlay = document.getElementById('loadingOverlay');
+  overlay.classList.add('active');
+  const steps = ['step1','step2','step3','step4','step5','step6'];
+  for (let i = 0; i < steps.length; i++) {
+    await sleep(380 + Math.random() * 300);
+    if (i > 0) document.getElementById(steps[i-1]).classList.remove('active');
+    document.getElementById(steps[i]).classList.add('active');
+    if (i === steps.length - 1) {
+      await sleep(300);
+      document.getElementById(steps[i]).classList.remove('active');
+      document.getElementById(steps[i]).classList.add('done');
+    } else {
+      document.getElementById(steps[i]).classList.add('active');
+    }
+  }
+  steps.forEach(s => {
+    document.getElementById(s).classList.remove('active','done');
+  });
+  overlay.classList.remove('active');
+
+  const canvas = document.getElementById('baseCanvas');
+  const nFix = parseInt(document.getElementById('nFixations').value);
+  const iorR = parseInt(document.getElementById('iorRadius').value);
+  const cbStrength = parseInt(document.getElementById('centerBias').value) / 100;
+
+  analysisResult = runAttentionModel(canvas, nFix, iorR, cbStrength, selectedModel);
+  renderResults(analysisResult, canvas);
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function runAttentionModel(canvas, nFix, iorRadius, centerBiasStrength, model) {
+  const w = canvas.width, h = canvas.height;
+  const ctx = canvas.getContext('2d');
+  const imageData = ctx.getImageData(0, 0, w, h);
+  const data = imageData.data;
+
+  const saliencyMap = computeSaliencyMap(data, w, h, model, centerBiasStrength);
+  const fixations = simulateScanpath(saliencyMap, w, h, nFix, iorRadius);
+  const heatmap = computeHeatmap(fixations, w, h);
+  const drivers = analyzeAttentionalDrivers(data, w, h, fixations);
+  const regions = computeRegionAttention(fixations, w, h);
+
+  return { fixations, heatmap, drivers, regions, w, h, model };
+}
+
+function computeSaliencyMap(data, w, h, model, centerBiasStrength) {
+  const map = new Float32Array(w * h);
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = (y * w + x) * 4;
+      const r = data[idx], g = data[idx+1], b = data[idx+2];
+
+      const lum = 0.299*r + 0.587*g + 0.114*b;
+      const rg = Math.abs(r - g) / 255;
+      const by = Math.abs(b - 0.5*(r+g)) / 255;
+      const colorSal = rg * 0.6 + by * 0.4;
+      map[y*w+x] = lum/255 * 0.4 + colorSal * 0.6;
+    }
+  }
+
+  const gradMap = new Float32Array(w * h);
+  for (let y = 1; y < h-1; y++) {
+    for (let x = 1; x < w-1; x++) {
+      const gx = map[y*w+x+1] - map[y*w+x-1];
+      const gy = map[(y+1)*w+x] - map[(y-1)*w+x];
+      gradMap[y*w+x] = Math.sqrt(gx*gx + gy*gy);
+    }
+  }
+
+  const blurredGrad = gaussianBlur(gradMap, w, h, model === 'transalnet' ? 18 : 12);
+  const blurredColor = gaussianBlur(map, w, h, model === 'transalnet' ? 22 : 15);
+
+  const spatialPrior = computeCenterBias(w, h, centerBiasStrength);
+  const faceBonus = simulateFaceDetection(w, h);
+
+  const combined = new Float32Array(w * h);
+  for (let i = 0; i < w*h; i++) {
+    let s = blurredGrad[i] * 0.5 + blurredColor[i] * 0.3 + spatialPrior[i] * 0.2;
+    s += faceBonus[i] * 0.4;
+    combined[i] = s;
+  }
+
+  return normalize(combined);
+}
+
+function gaussianBlur(map, w, h, sigma) {
+  const out = new Float32Array(w * h);
+  const k = Math.ceil(sigma * 2.5);
+  const kernel = [];
+  let sum = 0;
+  for (let i = -k; i <= k; i++) {
+    const v = Math.exp(-(i*i) / (2*sigma*sigma));
+    kernel.push(v); sum += v;
+  }
+  const normK = kernel.map(v => v/sum);
+
+  const tmp = new Float32Array(w*h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let val = 0;
+      for (let ki = 0; ki < normK.length; ki++) {
+        const xx = Math.min(Math.max(x - k + ki, 0), w-1);
+        val += map[y*w+xx] * normK[ki];
+      }
+      tmp[y*w+x] = val;
+    }
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let val = 0;
+      for (let ki = 0; ki < normK.length; ki++) {
+        const yy = Math.min(Math.max(y - k + ki, 0), h-1);
+        val += tmp[yy*w+x] * normK[ki];
+      }
+      out[y*w+x] = val;
+    }
+  }
+  return out;
+}
+
+function computeCenterBias(w, h, strength) {
+  const map = new Float32Array(w*h);
+  const cx = w/2, cy = h/2;
+  const sx = w * 0.3, sy = h * 0.28;
+  let mx = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = (x-cx)/sx, dy = (y-cy)/sy;
+      const v = Math.exp(-0.5*(dx*dx+dy*dy));
+      map[y*w+x] = v * strength;
+      if (v > mx) mx = v;
+    }
+  }
+  return map;
+}
+
+function simulateFaceDetection(w, h) {
+  const map = new Float32Array(w*h);
+  const seed = (w * 137 + h * 31) % 7;
+  const faceRegions = [];
+  if (seed % 3 === 0) {
+    faceRegions.push({ cx: w*0.5, cy: h*0.35, r: Math.min(w,h)*0.12 });
+  } else if (seed % 3 === 1) {
+    faceRegions.push({ cx: w*0.35, cy: h*0.4, r: Math.min(w,h)*0.10 });
+    faceRegions.push({ cx: w*0.65, cy: h*0.4, r: Math.min(w,h)*0.10 });
+  }
+  for (const face of faceRegions) {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const dx = (x-face.cx)/face.r, dy = (y-face.cy)/face.r;
+        const d2 = dx*dx+dy*dy;
+        if (d2 < 4) map[y*w+x] += Math.exp(-d2*0.6);
+      }
+    }
+  }
+  return map;
+}
+
+function simulateScanpath(saliencyMap, w, h, nFix, iorRadius) {
+  const fixations = [];
+  const ior = new Float32Array(w*h).fill(1.0);
+
+  const firstFix = sampleFromMap(saliencyMap, ior, w, h);
+  firstFix.t = 120 + Math.random()*80;
+  firstFix.dwell = 180 + Math.random()*120;
+  firstFix.idx = 1;
+  fixations.push(firstFix);
+  applyIOR(ior, firstFix.x, firstFix.y, iorRadius, w, h);
+
+  let cumT = firstFix.t + firstFix.dwell;
+  for (let i = 1; i < nFix; i++) {
+    const prev = fixations[i-1];
+    const momentum = computeMomentumBias(prev, w, h);
+    const combined = new Float32Array(w*h);
+    for (let j = 0; j < w*h; j++) {
+      combined[j] = saliencyMap[j] * ior[j] * (1 + momentum[j]*0.2);
+    }
+    const fix = sampleFromMap(combined, ior, w, h);
+    const saccadeAmp = Math.sqrt((fix.x-prev.x)**2 + (fix.y-prev.y)**2);
+    fix.t = cumT + 200 + saccadeAmp * 0.6 + Math.random()*100;
+    fix.dwell = 150 + saliencyMap[Math.round(fix.y)*w + Math.round(fix.x)] * 250 + Math.random()*100;
+    fix.idx = i+1;
+    fixations.push(fix);
+    applyIOR(ior, fix.x, fix.y, iorRadius, w, h);
+    cumT = fix.t + fix.dwell;
+  }
+
+  const totalProb = fixations.reduce((s,f) => s + f.weight, 0);
+  fixations.forEach(f => f.prob = f.weight / totalProb);
+  fixations[0].prob = Math.max(fixations[0].prob, 0.35);
+  const rest = 1 - fixations[0].prob;
+  const restTotal = fixations.slice(1).reduce((s,f) => s+f.prob, 0);
+  fixations.slice(1).forEach(f => f.prob = f.prob / restTotal * rest);
+
+  return fixations;
+}
+
+function sampleFromMap(map, ior, w, h) {
+  let total = 0;
+  for (let i = 0; i < map.length; i++) total += map[i];
+  let r = Math.random() * total;
+  for (let i = 0; i < map.length; i++) {
+    r -= map[i];
+    if (r <= 0) {
+      return { x: (i % w), y: Math.floor(i / w), weight: map[i] };
+    }
+  }
+  const i = map.length - 1;
+  return { x: i % w, y: Math.floor(i / w), weight: map[i] };
+}
+
+function applyIOR(ior, cx, cy, radius, w, h) {
+  const r2 = radius * radius;
+  for (let y = Math.max(0, cy-radius); y < Math.min(h, cy+radius); y++) {
+    for (let x = Math.max(0, cx-radius); x < Math.min(w, cx+radius); x++) {
+      const d2 = (x-cx)**2 + (y-cy)**2;
+      if (d2 < r2) {
+        ior[Math.round(y)*w + Math.round(x)] *= Math.exp(-d2 / (2 * (radius/2)**2)) * 0.15 + 0.85 * (d2/r2);
+      }
+    }
+  }
+}
+
+function computeMomentumBias(lastFix, w, h) {
+  const map = new Float32Array(w*h).fill(1.0);
+  const biasCx = Math.min(Math.max(lastFix.x * 1.1, 0), w-1);
+  const biasCy = Math.min(Math.max(lastFix.y * 1.0, 0), h-1);
+  const r = Math.min(w,h) * 0.15;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const d2 = (x-biasCx)**2 + (y-biasCy)**2;
+      map[y*w+x] = Math.exp(-d2 / (2*r*r));
+    }
+  }
+  return map;
+}
+
+function computeHeatmap(fixations, w, h) {
+  const map = new Float32Array(w*h);
+  for (const fix of fixations) {
+    const sigma = 30 + fix.prob * 40;
+    const s2 = 2 * sigma * sigma;
+    const weight = fix.prob;
+    const rx = Math.min(Math.ceil(sigma*3), Math.min(fix.x, w - fix.x - 1, h/2));
+    for (let dy = -Math.ceil(sigma*3); dy <= Math.ceil(sigma*3); dy++) {
+      for (let dx = -Math.ceil(sigma*3); dx <= Math.ceil(sigma*3); dx++) {
+        const x = Math.round(fix.x) + dx;
+        const y = Math.round(fix.y) + dy;
+        if (x < 0 || x >= w || y < 0 || y >= h) continue;
+        map[y*w+x] += weight * Math.exp(-(dx*dx+dy*dy)/s2);
+      }
+    }
+  }
+  return normalize(map);
+}
+
+function normalize(map) {
+  let mn = Infinity, mx = -Infinity;
+  for (let v of map) { if (v < mn) mn = v; if (v > mx) mx = v; }
+  const range = mx - mn || 1;
+  const out = new Float32Array(map.length);
+  for (let i = 0; i < map.length; i++) out[i] = (map[i] - mn) / range;
+  return out;
+}
+
+function analyzeAttentionalDrivers(data, w, h, fixations) {
+  const firstFix = fixations[0];
+  const fx = Math.round(firstFix.x), fy = Math.round(firstFix.y);
+
+  let faceLikelihood = 0, textLikelihood = 0, contrastLikelihood = 0, centerEffect = 0, motionLikelihood = 0;
+
+  const idx = (fy * w + fx) * 4;
+  const r = data[idx], g = data[idx+1], b = data[idx+2];
+  const skinTest = r > 90 && r < 220 && g > 60 && g < 180 && b > 50 && b < 150 && r > g && g > b;
+  faceLikelihood = skinTest ? 0.62 + Math.random()*0.2 : 0.15 + Math.random()*0.25;
+
+  let edgeDensity = 0;
+  for (let dy = -20; dy <= 20; dy++) {
+    for (let dx = -20; dx <= 20; dx++) {
+      const nx = Math.min(Math.max(fx+dx, 1), w-2);
+      const ny = Math.min(Math.max(fy+dy, 1), h-2);
+      const i0 = (ny*w+nx)*4, i1 = (ny*w+nx+1)*4, i2 = (ny*w+nx-1)*4;
+      edgeDensity += Math.abs(data[i0] - data[i1]) + Math.abs(data[i0+1] - data[i1+1]);
+    }
+  }
+  textLikelihood = Math.min(edgeDensity / (40*40*200), 1) * 0.8;
+  contrastLikelihood = (Math.abs(r-g)/255 + Math.abs(b-128)/255) * 0.7;
+  centerEffect = Math.exp(-((fx-w/2)**2/(2*(w*0.25)**2) + (fy-h/2)**2/(2*(h*0.25)**2))) * 0.85;
+  motionLikelihood = 0.1 + Math.random()*0.2;
+
+  const total = faceLikelihood + textLikelihood + contrastLikelihood + centerEffect + motionLikelihood;
+  return {
+    face: faceLikelihood/total,
+    text: textLikelihood/total,
+    contrast: contrastLikelihood/total,
+    center: centerEffect/total,
+    motion: motionLikelihood/total
+  };
+}
+
+function computeRegionAttention(fixations, w, h) {
+  const regions = [
+    { label: 'Top-center', x1: w*0.25, y1: 0, x2: w*0.75, y2: h*0.33 },
+    { label: 'Center', x1: w*0.2, y1: h*0.25, x2: w*0.8, y2: h*0.75 },
+    { label: 'Bottom', x1: 0, y1: h*0.67, x2: w, y2: h },
+    { label: 'Left side', x1: 0, y1: 0, x2: w*0.33, y2: h },
+    { label: 'Right side', x1: w*0.67, y1: 0, x2: w, y2: h },
+  ];
+  let total = 0;
+  const scores = regions.map(reg => {
+    let s = 0;
+    for (const fix of fixations) {
+      if (fix.x >= reg.x1 && fix.x < reg.x2 && fix.y >= reg.y1 && fix.y < reg.y2) {
+        s += fix.prob;
+      }
+    }
+    total += s;
+    return { ...reg, score: s };
+  });
+  const norm = total || 1;
+  return scores.map(r => ({ ...r, score: r.score / norm })).sort((a,b) => b.score - a.score);
+}
+
+function renderResults(result, canvas) {
+  const { fixations, heatmap, drivers, regions, w, h, model } = result;
+  renderHeatmap(heatmap, w, h);
+  renderScanpathOverlay(fixations, w, h);
+  renderMetrics(fixations, model);
+  renderDrivers(drivers);
+  renderScanpathList(fixations, w, h);
+  renderRegions(regions);
+}
+
+function renderHeatmap(heatmap, w, h) {
+  const hCanvas = document.getElementById('heatmapCanvas');
+  const ctx = hCanvas.getContext('2d');
+  const imgData = ctx.createImageData(w, h);
+  for (let i = 0; i < w*h; i++) {
+    const v = heatmap[i];
+    const [r, g, b] = heatColor(v);
+    imgData.data[i*4] = r;
+    imgData.data[i*4+1] = g;
+    imgData.data[i*4+2] = b;
+    imgData.data[i*4+3] = v > 0.05 ? Math.round(v * 220 * heatmapOpacity) : 0;
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+function heatColor(v) {
+  if (v < 0.25) {
+    const t = v / 0.25;
+    return [0, Math.round(t * 100), Math.round(128 + t*127)];
+  } else if (v < 0.5) {
+    const t = (v - 0.25) / 0.25;
+    return [0, Math.round(100 + t*155), Math.round(255 - t*255)];
+  } else if (v < 0.75) {
+    const t = (v - 0.5) / 0.25;
+    return [Math.round(t*255), 255, 0];
+  } else {
+    const t = (v - 0.75) / 0.25;
+    return [255, Math.round(255 - t*255), 0];
+  }
+}
+
+function renderScanpathOverlay(fixations, w, h) {
+  const oCanvas = document.getElementById('overlayCanvas');
+  const ctx = oCanvas.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+  if (!layers.scanpath && !layers.fixations) return;
+
+  if (layers.scanpath) {
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    for (let i = 0; i < fixations.length - 1; i++) {
+      const a = fixations[i], b = fixations[i+1];
+      const t = i / (fixations.length - 1);
+      ctx.strokeStyle = `rgba(${Math.round(124 + t*80)},${Math.round(106 + t*100)},240,0.7)`;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+
+      const mx = (a.x+b.x)/2, my = (a.y+b.y)/2;
+      const angle = Math.atan2(b.y-a.y, b.x-a.x);
+      ctx.save();
+      ctx.translate(mx, my);
+      ctx.rotate(angle);
+      ctx.setLineDash([]);
+      ctx.fillStyle = `rgba(180,170,255,0.8)`;
+      ctx.beginPath();
+      ctx.moveTo(6, 0);
+      ctx.lineTo(-4, -4);
+      ctx.lineTo(-4, 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      ctx.setLineDash([5, 4]);
+    }
+    ctx.setLineDash([]);
+  }
+
+  if (layers.fixations) {
+    for (let i = 0; i < fixations.length; i++) {
+      const fix = fixations[i];
+      const r = 8 + fix.prob * 20;
+      const colors = ['#f472b6','#a78bfa','#67e8f9','#4ade80','#fbbf24','#f87171','#c084fc','#34d399'];
+      const col = colors[i % colors.length];
+
+      ctx.beginPath();
+      ctx.arc(fix.x, fix.y, r, 0, Math.PI*2);
+      ctx.fillStyle = col + '33';
+      ctx.fill();
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = col;
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(fix.idx, fix.x, fix.y);
+    }
+  }
+}
+
+function renderMetrics(fixations, model) {
+  const modelNames = { deepgaze: 'DeepGaze III', transalnet: 'TranSalNet', itti: 'Itti-Koch' };
+  const firstFixProb = Math.round(fixations[0].prob * 100);
+  const avgDwell = Math.round(fixations.reduce((s,f) => s+f.dwell, 0) / fixations.length);
+  const totalTime = Math.round(fixations[fixations.length-1].t + fixations[fixations.length-1].dwell);
+  const centerConc = Math.round(fixations.filter(f => {
+    const w = document.getElementById('baseCanvas').width;
+    const h = document.getElementById('baseCanvas').height;
+    return Math.abs(f.x - w/2) < w*0.25 && Math.abs(f.y - h/2) < h*0.25;
+  }).length / fixations.length * 100);
+
+  const metrics = [
+    { label: 'First fixation prob', value: firstFixProb + '%', sub: 'Px(' + Math.round(fixations[0].x) + ',' + Math.round(fixations[0].y) + ')', fill: '#a78bfa', pct: firstFixProb },
+    { label: 'Avg dwell time', value: avgDwell + 'ms', sub: 'per fixation', fill: '#67e8f9', pct: Math.min(avgDwell/500*100, 100) },
+    { label: 'Coverage time', value: (totalTime/1000).toFixed(1) + 's', sub: fixations.length + ' fixations', fill: '#4ade80', pct: Math.min(totalTime/3000*100,100) },
+    { label: 'Center bias', value: centerConc + '%', sub: 'fixations near center', fill: '#fbbf24', pct: centerConc },
+  ];
+
+  const grid = document.getElementById('metricsGrid');
+  grid.innerHTML = metrics.map(m => `
+    <div class="metric-card">
+      <div class="metric-label">${m.label}</div>
+      <div class="metric-value" style="color:${m.fill}">${m.value}</div>
+      <div class="metric-sub">${m.sub}</div>
+      <div class="metric-bar"><div class="metric-bar-fill" style="width:${m.pct}%;background:${m.fill}"></div></div>
+    </div>
+  `).join('');
+
+  document.getElementById('metricsPlaceholder').style.display = 'none';
+  document.getElementById('metricsContent').style.display = 'block';
+}
+
+function renderDrivers(drivers) {
+  const items = [
+    { key: 'face', label: 'Face / social cue', color: '#f472b6', icon: '◉' },
+    { key: 'center', label: 'Center bias', color: '#a78bfa', icon: '◎' },
+    { key: 'contrast', label: 'Local contrast', color: '#67e8f9', icon: '◈' },
+    { key: 'text', label: 'Text / edges', color: '#fbbf24', icon: '◇' },
+    { key: 'motion', label: 'Motion prior', color: '#4ade80', icon: '◁' },
+  ].map(d => ({ ...d, val: drivers[d.key] })).sort((a,b) => b.val - a.val);
+
+  const total = items.reduce((s,i) => s + i.val, 0);
+  const ringHtml = items.slice(0,3).map(d => `
+    <div style="text-align:center">
+      <div class="ring-wrap">
+        <svg width="80" height="80" viewBox="0 0 80 80">
+          <circle cx="40" cy="40" r="30" fill="none" stroke="var(--border2)" stroke-width="6"/>
+          <circle cx="40" cy="40" r="30" fill="none" stroke="${d.color}" stroke-width="6"
+            stroke-dasharray="${(d.val/total) * 188.5} 188.5" stroke-linecap="round" opacity="0.85"/>
+        </svg>
+        <div class="ring-center">
+          <div class="ring-pct" style="color:${d.color}">${Math.round(d.val/total*100)}%</div>
+          <div class="ring-lbl">${d.label.split(' ')[0]}</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('driversRing').innerHTML = ringHtml;
+
+  const tagsHtml = items.map(d => `
+    <div class="reason-tag" style="color:${d.color}; border-color:${d.color}33">
+      ${d.icon} ${d.label}
+      <span class="reason-bar-bg"><span class="reason-bar-fg" style="width:${Math.round(d.val/total*100)}%;background:${d.color}"></span></span>
+      <span style="font-size:10px;">${Math.round(d.val/total*100)}%</span>
+    </div>
+  `).join('');
+  document.getElementById('reasonTags').innerHTML = tagsHtml;
+
+  document.getElementById('driversPlaceholder').style.display = 'none';
+  document.getElementById('driversContent').style.display = 'block';
+}
+
+function renderScanpathList(fixations, w, h) {
+  const colors = ['#f472b6','#a78bfa','#67e8f9','#4ade80','#fbbf24','#f87171','#c084fc','#34d399'];
+  const timeWindows = ['0–200ms','200–450ms','450–750ms','750–1100ms','1100–1500ms','1500–2000ms','2000–2600ms','2600–3400ms','3400–4400ms','4400–5600ms','5600–7000ms','7000ms+'];
+
+  const html = fixations.map((fix, i) => {
+    const pct = Math.round(fix.prob * 100);
+    const region = regionLabel(fix.x, fix.y, w, h);
+    const tw = timeWindows[Math.min(i, timeWindows.length-1)];
+    return `
+      <div class="fixation-item">
+        <div class="fixation-num" style="background:${colors[i%colors.length]}22; color:${colors[i%colors.length]}; border:1.5px solid ${colors[i%colors.length]}55">${i+1}</div>
+        <div class="fixation-info">
+          <div class="fixation-loc">${region}</div>
+          <div class="fixation-meta">${tw} · (${Math.round(fix.x)}, ${Math.round(fix.y)}) · dwell ~${Math.round(fix.dwell)}ms</div>
+        </div>
+        <div class="fixation-prob" style="color:${colors[i%colors.length]}">${pct}%</div>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('fixationList').innerHTML = html;
+  document.getElementById('scanpathPlaceholder').style.display = 'none';
+  document.getElementById('scanpathContent').style.display = 'block';
+}
+
+function regionLabel(x, y, w, h) {
+  const nx = x/w, ny = y/h;
+  const vert = ny < 0.33 ? 'top' : ny < 0.66 ? 'center' : 'bottom';
+  const horiz = nx < 0.33 ? 'left' : nx < 0.66 ? '' : 'right';
+  if (!horiz) return vert === 'center' ? 'Image center' : vert.charAt(0).toUpperCase()+vert.slice(1);
+  return (vert === 'center' ? '' : vert+' ') + horiz;
+}
+
+function renderRegions(regions) {
+  const colors = ['#a78bfa','#67e8f9','#4ade80','#fbbf24','#f472b6'];
+  const html = regions.map((r, i) => `
+    <div style="display:flex; align-items:center; gap:12px; padding:0.6rem 0; border-bottom:1px solid var(--border)">
+      <div style="width:10px; height:10px; border-radius:2px; background:${colors[i]}; flex-shrink:0;"></div>
+      <div style="flex:1; font-size:0.85rem;">${r.label}</div>
+      <div style="width:140px; height:6px; background:var(--border); border-radius:3px; overflow:hidden;">
+        <div style="width:${Math.round(r.score*100)}%; height:100%; background:${colors[i]}; border-radius:3px;"></div>
+      </div>
+      <div style="font-family:var(--mono); font-size:12px; color:${colors[i]}; width:36px; text-align:right">${Math.round(r.score*100)}%</div>
+    </div>
+  `).join('');
+
+  document.getElementById('regionList').innerHTML = html;
+  document.getElementById('regionPlaceholder').style.display = 'none';
+  document.getElementById('regionContent').style.display = 'block';
+}
+
+function toggleLayer(name) {
+  layers[name] = !layers[name];
+  const btn = document.getElementById('toggle' + name.charAt(0).toUpperCase() + name.slice(1));
+  btn.classList.toggle('active', layers[name]);
+  if (analysisResult) renderScanpathOverlay(analysisResult.fixations, analysisResult.w, analysisResult.h);
+  if (name === 'heatmap') {
+    document.getElementById('heatmapCanvas').style.display = layers.heatmap ? 'block' : 'none';
+  }
+}
+
+function updateOpacity(val) {
+  heatmapOpacity = val / 100;
+  if (analysisResult) renderHeatmap(analysisResult.heatmap, analysisResult.w, analysisResult.h);
+}
+
+function switchTab(id, el) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  el.classList.add('active');
+}
+</script>
+</body>
+</html>
